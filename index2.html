@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>מערכת ניהול מחשבים - טכנודע</title>
+<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-database-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<style>
+  :root{
+    --bg:#eef2f7; --panel:#fff; --ink:#1f2933; --muted:#6b7785; --line:#dfe5ec;
+    --brand:#0b5fa5; --brand2:#0a4a83;
+    --a1:#b00020; --a2:#e03131; --a3:#f76707; --a4:#f2a007; --a5:#e8c500;
+    --a6:#8bc34a; --a7:#4caf50; --a8:#2e7d32; --a0:#9aa5b1;
+    --gold:#ffd24d;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    font-family:"Segoe UI",Arial,Helvetica,sans-serif;
+    background:var(--bg); color:var(--ink); line-height:1.5; padding-bottom:60px;
+  }
+  header{
+    background:linear-gradient(135deg,var(--brand2),var(--brand));
+    color:#fff; padding:18px 24px;
+    display:flex; align-items:center; gap:20px; flex-wrap:wrap;
+    box-shadow:0 2px 12px rgba(0,0,0,.15); position:sticky; top:0; z-index:50;
+  }
+  header h1{font-size:20px; font-weight:700; white-space:nowrap}
+  .kpis{display:flex; gap:10px; flex-wrap:wrap; margin-inline-start:auto}
+  .kpi{background:rgba(255,255,255,.15); border-radius:8px; padding:6px 14px; text-align:center; min-width:82px}
+  .kpi b{display:block; font-size:19px; line-height:1.2}
+  .kpi span{font-size:11px; opacity:.9}
+  #conn{font-size:12px; padding:5px 12px; border-radius:20px; background:rgba(255,255,255,.2); white-space:nowrap}
+  #conn.ok{background:#2e7d32}
+  #conn.off{background:#b00020}
+
+  .toolbar{
+    background:var(--panel); border-bottom:1px solid var(--line);
+    padding:12px 24px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+    position:sticky; top:64px; z-index:40;
+  }
+  input[type=text],select{
+    font-family:inherit; font-size:14px; padding:8px 12px;
+    border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--ink);
+  }
+  input[type=text]{min-width:200px}
+  button{
+    font-family:inherit; font-size:14px; font-weight:600; padding:8px 16px;
+    border:0; border-radius:8px; background:var(--brand); color:#fff; cursor:pointer;
+    transition:filter .15s;
+  }
+  button:hover{filter:brightness(1.12)}
+  button.ghost{background:#fff; color:var(--brand); border:1px solid var(--brand)}
+  button.danger{background:#b00020}
+  button.sm{padding:4px 10px; font-size:12px}
+
+  main{padding:20px 24px; display:grid; grid-template-columns:340px 1fr; gap:20px; align-items:start}
+  @media (max-width:1100px){ main{grid-template-columns:1fr} }
+
+  .panel{background:var(--panel); border:1px solid var(--line); border-radius:12px; overflow:hidden}
+  .panel > h2{
+    font-size:15px; padding:12px 16px; background:#f6f8fb; border-bottom:1px solid var(--line);
+    display:flex; align-items:center; gap:8px;
+  }
+  .panel > h2 .cnt{margin-inline-start:auto; font-size:12px; color:var(--muted); font-weight:500}
+  .pool{max-height:calc(100vh - 220px); overflow-y:auto; padding:10px; min-height:120px}
+  .zones{display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:16px}
+  .zone{background:var(--panel); border:1px solid var(--line); border-radius:12px; display:flex; flex-direction:column}
+  .zone > header{
+    background:#f6f8fb; color:var(--ink); box-shadow:none; position:static;
+    padding:10px 14px; border-bottom:1px solid var(--line); border-radius:12px 12px 0 0;
+    display:flex; align-items:center; gap:8px;
+  }
+  .zone > header .zname{font-weight:700; font-size:15px; flex:1; cursor:text}
+  .zone > header .zc{font-size:12px; color:var(--muted); background:#fff; border:1px solid var(--line); border-radius:20px; padding:1px 9px}
+  .zone .drop{padding:10px; min-height:90px; flex:1}
+  .drop.over{background:#e3f0fb; outline:2px dashed var(--brand); outline-offset:-6px; border-radius:8px}
+
+  .card{
+    background:#fff; border:1px solid var(--line); border-inline-start:5px solid var(--a0);
+    border-radius:9px; padding:9px 11px; margin-bottom:8px; cursor:grab;
+    box-shadow:0 1px 3px rgba(0,0,0,.05);
+  }
+  .card:active{cursor:grabbing}
+  .card.dragging{opacity:.4}
+  .card .t{display:flex; align-items:baseline; gap:7px}
+  .card .name{font-weight:700; font-size:14px; flex:1}
+  .card .qty{background:var(--brand); color:#fff; font-size:12px; font-weight:700; border-radius:20px; padding:1px 9px}
+  .card .meta{font-size:12px; color:var(--muted); margin-top:3px}
+  .card .tags{display:flex; gap:5px; flex-wrap:wrap; margin-top:6px; align-items:center}
+  .tag{font-size:11px; border-radius:5px; padding:2px 7px; font-weight:600; white-space:nowrap}
+  .tag.age{background:#eef1f5; color:#333}
+  .tag.gen{background:#eef1f5; color:#333}
+  .tag.site{background:var(--gold); color:#5a3d00}
+  .tag.act{background:#dfe3ff; color:#00308f}
+  .card .row2{display:flex; gap:6px; margin-top:7px; align-items:center}
+  .card select{font-size:11px; padding:3px 6px; border-radius:6px; flex:1}
+  .card .note{font-size:11px; padding:3px 6px; border-radius:6px; flex:1.4; min-width:0}
+
+  .legend{display:flex; gap:14px; flex-wrap:wrap; padding:10px 24px; font-size:12px; color:var(--muted)}
+  .legend i{display:inline-block; width:11px; height:11px; border-radius:3px; margin-inline-end:5px; vertical-align:-1px}
+
+  .empty{color:var(--muted); font-size:13px; text-align:center; padding:22px 10px}
+  dialog{border:0; border-radius:12px; padding:0; max-width:560px; width:92%; box-shadow:0 20px 60px rgba(0,0,0,.3)}
+  dialog::backdrop{background:rgba(0,0,0,.45)}
+  dialog .dh{background:var(--brand); color:#fff; padding:14px 18px; font-weight:700}
+  dialog .db{padding:18px}
+  dialog .df{padding:12px 18px; background:#f6f8fb; display:flex; gap:8px; justify-content:flex-start}
+  .toast{
+    position:fixed; bottom:20px; inset-inline-start:20px; background:#1f2933; color:#fff;
+    padding:11px 18px; border-radius:9px; font-size:14px; z-index:200; box-shadow:0 6px 20px rgba(0,0,0,.3);
+    opacity:0; transform:translateY(12px); transition:.25s; pointer-events:none;
+  }
+  .toast.show{opacity:1; transform:none}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🖥️ מערכת ניהול מחשבים — טכנודע</h1>
+  <div class="kpis">
+    <div class="kpi"><b id="kTotal">0</b><span>מחשבים</span></div>
+    <div class="kpi"><b id="kRows">0</b><span>עמדות</span></div>
+    <div class="kpi"><b id="kAssigned">0</b><span>משויכים</span></div>
+    <div class="kpi"><b id="kAge">0</b><span>גיל ממוצע</span></div>
+  </div>
+  <div id="conn">מתחבר…</div>
+</header>
+
+<div class="toolbar">
+  <input type="text" id="q" placeholder="🔍 חיפוש מיקום / דגם / מעבד…">
+  <select id="fUrg"><option value="">כל רמות הדחיפות</option></select>
+  <select id="fType">
+    <option value="">כל הסוגים</option>
+    <option value="1">סוג 1 — נייח משרדי</option>
+    <option value="2">סוג 2 — נייד משרדי</option>
+    <option value="3">סוג 3 — נייח מעבד חזק לחוגים</option>
+  </select>
+  <select id="fAge">
+    <option value="">כל הגילאים</option>
+    <option value="10">בני 10 שנים ומעלה</option>
+    <option value="8">בני 8 שנים ומעלה</option>
+    <option value="5">בני 5 שנים ומעלה</option>
+    <option value="-4">עד 4 שנים</option>
+  </select>
+  <button id="bNewZone">➕ מתחם חדש</button>
+  <button id="bExport" class="ghost">📊 ייצוא לאקסל</button>
+  <button id="bReset" class="ghost">♻️ טעינה מחדש מהמיפוי</button>
+</div>
+
+<div class="legend">
+  <span><i style="background:var(--a1)"></i>12+ שנים</span>
+  <span><i style="background:var(--a3)"></i>9–11 שנים</span>
+  <span><i style="background:var(--a5)"></i>6–8 שנים</span>
+  <span><i style="background:var(--a6)"></i>3–5 שנים</span>
+  <span><i style="background:var(--a8)"></i>עד שנתיים</span>
+  <span><i style="background:var(--gold)"></i>מתחם טכנודע ישן</span>
+  <span style="margin-inline-start:auto">גרור כרטיס מהרשימה אל מתחם · לחיצה כפולה על שם מתחם לשינוי</span>
+</div>
+
+<main>
+  <section class="panel">
+    <h2>📋 מחשבים לא משויכים <span class="cnt" id="poolCnt"></span></h2>
+    <div class="pool drop" id="pool" data-zone=""></div>
+  </section>
+
+  <section>
+    <div class="zones" id="zones"></div>
+  </section>
+</main>
+
+<dialog id="dlg">
+  <div class="dh" id="dlgTitle">כותרת</div>
+  <div class="db" id="dlgBody"></div>
+  <div class="df" id="dlgFoot"></div>
+</dialog>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================ נתוני מקור ============================ */
+const SEED = [{"id":"c1","loc":"טכנולוגיה","site":"טכנודע","count":14,"model":"DELL Optiplex 7010","os":"win10","cpu":"i7-3770","gen":3,"ram":8,"urgency":"קריטי - החלפה מיידית","action":"להחליף במיידי","year":2012},{"id":"c2","loc":"אחזקה - חדר שרתים מצלמות","site":"טכנודע","count":1,"model":"DELL Optiplex 7010","os":"win10","cpu":"I7- 3770","gen":3,"ram":8,"urgency":"קריטי - החלפה מיידית","action":"להחליף במיידי","year":2012},{"id":"c3","loc":"טכנולוגיה - מורה","site":"טכנודע","count":1,"model":"DELL Optiplex 7010","os":"win10","cpu":"i7-3770","gen":3,"ram":8,"urgency":"קריטי - החלפה מיידית","action":"להחליף במיידי","year":2012},{"id":"c4","loc":"יחידה רפואית ב' VR","site":"טכנודע","count":1,"model":"DELL Optiplex 7010","os":"win10","cpu":"i7-3770","gen":3,"ram":8,"urgency":"קריטי - החלפה מיידית","action":"להחליף במיידי","year":2012},{"id":"c5","loc":"מחשב נייד קבלה","site":"טכנודע","count":1,"model":"DELL Latitude E5530","os":"win10","cpu":"i5-3210","gen":3,"ram":4,"urgency":"קריטי - החלפה מיידית","action":"להחליף במיידי","year":2012},{"id":"c6","loc":"מחשב נייח שי","site":"טכנודע","count":1,"model":"Dell 7010","os":"win10","cpu":"i7-3770","gen":3,"ram":8,"urgency":"קריטי - החלפה מיידית","action":"להחליף במיידי","year":2012},{"id":"c7","loc":"מעבדה - דן דן","site":"טכנודע","count":1,"model":"","os":"win10","cpu":"i7-3770","gen":3,"ram":8,"urgency":"קריטי - החלפה מיידית","action":"להחליף במיידי","year":2012},{"id":"c8","loc":"מעבדה 1","site":"טכנודע","count":1,"model":"DELL Optiplex 7010","os":"win10","cpu":"i7-3770","gen":3,"ram":8,"urgency":"קריטי - החלפה מיידית","action":"להחליף במיידי","year":2012},{"id":"c9","loc":"מעבדה חץ - מחשב נייד","site":"טכנודע","count":1,"model":"HP250","os":"win10","cpu":"Pentium 3825u","gen":0,"ram":4,"urgency":"קריטי - החלפה מיידית","action":"להחליף במיידי","year":2015},{"id":"c10","loc":"מצפה כוכבים","site":"טכנודע","count":1,"model":"Dell 7010","os":"win10","cpu":"i7-3770","gen":3,"ram":8,"urgency":"קריטי - החלפה מיידית","action":"להחליף בשנה הבאה","year":2012},{"id":"c11","loc":"מרכז חץ","site":"טכנודע","count":1,"model":"DELL Optiplex 7010","os":"win10","cpu":"i7-3770","gen":3,"ram":8,"urgency":"קריטי - החלפה מיידית","action":"להחליף במיידי","year":2012},{"id":"c12","loc":"מרכז חץ - מור","site":"טכנודע","count":1,"model":"DELL Optiplex 7010","os":"win10","cpu":"i7-3770","gen":3,"ram":8,"urgency":"קריטי - החלפה מיידית","action":"להחליף בשנה הבאה","year":2012},{"id":"c13","loc":"שיווק 3","site":"טכנודע","count":1,"model":"DELL Optiplex 7010","os":"win10","cpu":"i7-3770","gen":3,"ram":8,"urgency":"קריטי - החלפה מיידית","action":"להחליף במיידי","year":2012},{"id":"c14","loc":"אחזקה - שליטה מרחוק","site":"טכנודע","count":1,"model":"DELL Optiplex 7020","os":"win10","cpu":"i5-4590","gen":4,"ram":8,"urgency":"דחוף - החלפה בשנה הבאה","action":"להחליף במיידי","year":2013},{"id":"c15","loc":"אחזקה מידן","site":"טכנודע","count":1,"model":"DELL Optiplex 7020","os":"win10","cpu":"i5-4590","gen":4,"ram":8,"urgency":"דחוף - החלפה בשנה הבאה","action":"להחליף במיידי","year":2013},{"id":"c16","loc":"ברונכוסקופיה","site":"טכנודע","count":1,"model":"","os":"win7","cpu":"i5-5200","gen":5,"ram":4,"urgency":"דחוף - החלפה בשנה הבאה","action":"להחליף במיידי","year":2015},{"id":"c17","loc":"גידול מוח 3","site":"טכנודע","count":1,"model":"","os":"win7","cpu":"i5-5200","gen":5,"ram":4,"urgency":"דחוף - החלפה בשנה הבאה","action":"להחליף במיידי","year":2015},{"id":"c18","loc":"טכנולוגיה","site":"טכנודע","count":1,"model":"DELL Optiplex 7020","os":"win10","cpu":"i5-4590","gen":4,"ram":8,"urgency":"דחוף - החלפה בשנה הבאה","action":"להחליף במיידי","year":2013},{"id":"c19","loc":"יחידה רפואית א'","site":"טכנודע","count":1,"model":"DELL Optiplex 7020","os":"win10","cpu":"i5-4590","gen":4,"ram":8,"urgency":"דחוף - החלפה בשנה הבאה","action":"להחליף במיידי","year":2013},{"id":"c20","loc":"מחשב קבלה dalpak2","site":"טכנודע","count":1,"model":"DELL Optiplex 7020","os":"win10","cpu":"i5-4590","gen":4,"ram":8,"urgency":"דחוף - החלפה בשנה הבאה","action":"להחליף במיידי","year":2013},{"id":"c21","loc":"מעבדה 2","site":"טכנודע","count":1,"model":"DELL Optiplex 7020","os":"win10","cpu":"i5-4590","gen":4,"ram":4,"urgency":"דחוף - החלפה בשנה הבאה","action":"","year":2013},{"id":"c22","loc":"מעבדה 5","site":"טכנודע","count":1,"model":"DELL Optiplex 7020","os":"win10","cpu":"i5-4590","gen":4,"ram":8,"urgency":"דחוף - החלפה בשנה הבאה","action":"להחליף במיידי","year":2013},{"id":"c23","loc":"מעבדה 6","site":"טכנודע","count":1,"model":"DELL Optiplex 7020","os":"win10","cpu":"i5-4590","gen":4,"ram":8,"urgency":"דחוף - החלפה בשנה הבאה","action":"להחליף במיידי","year":2013},{"id":"c24","loc":"מעבדת אלקטרוניקה - מורה","site":"טכנודע","count":1,"model":"DELL Optiplex 7020","os":"win10","cpu":"i5-4590","gen":4,"ram":8,"urgency":"דחוף - החלפה בשנה הבאה","action":"להחליף במיידי","year":2013},{"id":"c25","loc":"צינטור לב","site":"טכנודע","count":1,"model":"","os":"win7","cpu":"i5-5200","gen":5,"ram":4,"urgency":"דחוף - החלפה בשנה הבאה","action":"להחליף במיידי","year":2015},{"id":"c26","loc":"צינתור מוח","site":"טכנודע","count":1,"model":"","os":"win7","cpu":"i5-5200","gen":5,"ram":4,"urgency":"דחוף - החלפה בשנה הבאה","action":"להחליף במיידי","year":2015},{"id":"c27","loc":"קבלה - נעמי nomi","site":"טכנודע","count":1,"model":"DELL Optiplex 7020","os":"win10","cpu":"i5-4590","gen":4,"ram":8,"urgency":"דחוף - החלפה בשנה הבאה","action":"להחליף במיידי","year":2013},{"id":"c28","loc":"טכנולוגיה","site":"טכנודע","count":10,"model":"Lenovo ThinkCentre","os":"win11","cpu":"i7-6700","gen":6,"ram":16,"urgency":"גבוה - החלפה בעוד שנתיים","action":"להחליף במיידי","year":2015},{"id":"c29","loc":"חיידקים","site":"טכנודע","count":7,"model":"","os":"win7","cpu":"i3-6100","gen":6,"ram":8,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c30","loc":"חדר רכזים","site":"טכנודע","count":5,"model":"Dell 7040","os":"win10","cpu":"i5-6500","gen":6,"ram":8,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c31","loc":"חיוך שרירי הפנים","site":"טכנודע","count":2,"model":"","os":"win7","cpu":"i5-6200","gen":6,"ram":4,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c32","loc":"אחזקה - מחשב נייד","site":"טכנודע","count":1,"model":"Lenovo Thinkpad","os":"win10","cpu":"i7-6820","gen":6,"ram":16,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c33","loc":"אלבוניזם","site":"טכנודע","count":1,"model":"","os":"win7","cpu":"i5-6200","gen":6,"ram":4,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c34","loc":"בן או בת","site":"טכנודע","count":1,"model":"","os":"win7","cpu":"i5-6200","gen":6,"ram":4,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c35","loc":"גלגל גדול - דופק","site":"טכנודע","count":1,"model":"","os":"win7","cpu":"i5-6200","gen":6,"ram":4,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c36","loc":"דיסלקציה","site":"טכנודע","count":1,"model":"","os":"win7","cpu":"i5-6200","gen":6,"ram":4,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c37","loc":"דפיברילטור","site":"טכנודע","count":1,"model":"","os":"win10","cpu":"i5-6200","gen":6,"ram":4,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c38","loc":"הנהלת חשבונות - שולי","site":"טכנודע","count":1,"model":"DELL Optiplex","os":"win10","cpu":"i7-6700","gen":6,"ram":16,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c39","loc":"זיכרון","site":"טכנודע","count":1,"model":"","os":"win7","cpu":"i5-6200","gen":6,"ram":4,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c40","loc":"לחץ דם 3","site":"טכנודע","count":1,"model":"","os":"win7","cpu":"i5-6200","gen":6,"ram":4,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c41","loc":"ליד ספיר","site":"טכנודע","count":1,"model":"Dell 7040","os":"win10","cpu":"i5-6500","gen":6,"ram":16,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c42","loc":"מאמץ הלב","site":"טכנודע","count":1,"model":"","os":"win7","cpu":"i5-6200","gen":6,"ram":4,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c43","loc":"מבנה הלב","site":"טכנודע","count":1,"model":"","os":"win7","cpu":"i5-6200","gen":6,"ram":4,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c44","loc":"מחשב קבלה dalpak1","site":"טכנודע","count":1,"model":"DELL Optiplex 7040","os":"win10","cpu":"i5-6500","gen":6,"ram":12,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c45","loc":"מיקום הלב 3","site":"טכנודע","count":1,"model":"","os":"win7","cpu":"i5-6200","gen":6,"ram":4,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c46","loc":"מרכיבי הדם","site":"טכנודע","count":1,"model":"","os":"win7","cpu":"i5-6200","gen":6,"ram":4,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c47","loc":"משחק נוירונים - כתיבה","site":"טכנודע","count":1,"model":"","os":"win7","cpu":"i3-6100","gen":6,"ram":8,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c48","loc":"משחק נוירונים 8","site":"טכנודע","count":1,"model":"","os":"win7","cpu":"i3-6100","gen":6,"ram":8,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c49","loc":"משחק נוירונים חיבור","site":"טכנודע","count":1,"model":"","os":"win7","cpu":"i3-6100","gen":6,"ram":8,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c50","loc":"משחק נוירונים כדורסל","site":"טכנודע","count":1,"model":"","os":"win7","cpu":"i3-6100","gen":6,"ram":8,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c51","loc":"משחק נוירונים פסנתר","site":"טכנודע","count":1,"model":"","os":"win7","cpu":"i3-6100","gen":6,"ram":8,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c52","loc":"ניוון שרירים","site":"טכנודע","count":1,"model":"","os":"win7","cpu":"i5-6200","gen":6,"ram":4,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c53","loc":"סוגי דם","site":"טכנודע","count":1,"model":"","os":"win7","cpu":"i5-6200","gen":6,"ram":4,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c54","loc":"סורק 1","site":"טכנודע","count":1,"model":"","os":"win7","cpu":"i5-6200","gen":6,"ram":4,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c55","loc":"סטטוסקופ","site":"טכנודע","count":1,"model":"","os":"win7","cpu":"i5-6200","gen":6,"ram":4,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c56","loc":"עיוורון צבעים","site":"טכנודע","count":1,"model":"","os":"win7","cpu":"i5-6200","gen":6,"ram":4,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c57","loc":"פאזל מוח","site":"טכנודע","count":1,"model":"","os":"win7","cpu":"i5-6200","gen":6,"ram":4,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c58","loc":"פאזל נשימה","site":"טכנודע","count":1,"model":"","os":"win7","cpu":"i5-6200","gen":6,"ram":4,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c59","loc":"פולימורפיזם","site":"טכנודע","count":1,"model":"","os":"win7","cpu":"i5-6200","gen":6,"ram":4,"urgency":"גבוה - החלפה בעוד שנתיים","action":"","year":2015},{"id":"c60","loc":"תסמונת דאון","site":"טכנודע","count":1,"model":"","os":"win7","cpu":"i5-6200","gen":6,"ram":4,"urgency":"גבוה - החלפה בעוד שנתיים","action":"להחליף במיידי","year":2015},{"id":"c61","loc":"חדר מורים","site":"טכנודע","count":3,"model":"DELL Optiplex 7060","os":"win10","cpu":"i5-7500","gen":7,"ram":8,"urgency":"בינוני - החלפה בעוד 3 שנים","action":"","year":2016},{"id":"c62","loc":"אמילי","site":"טכנודע","count":1,"model":"lenovo Ideapad","os":"win11","cpu":"i7-7820","gen":7,"ram":16,"urgency":"בינוני - החלפה בעוד 3 שנים","action":"","year":2016},{"id":"c63","loc":"אמילי מחשב נייד","site":"טכנודע","count":1,"model":"Lenovo Thinkpad","os":"win11","cpu":"i7-7820","gen":7,"ram":16,"urgency":"בינוני - החלפה בעוד 3 שנים","action":"","year":2016},{"id":"c64","loc":"אסנת צפון","site":"טכנודע","count":1,"model":"Dell optiplex7050","os":"win10","cpu":"i5-7500","gen":7,"ram":8,"urgency":"בינוני - החלפה בעוד 3 שנים","action":"","year":2016},{"id":"c65","loc":"בועות אויר","site":"טכנודע","count":1,"model":"","os":"win10","cpu":"i5-7300","gen":7,"ram":16,"urgency":"בינוני - החלפה בעוד 3 שנים","action":"","year":2016},{"id":"c66","loc":"גדי - מנכ\"ל","site":"טכנודע","count":1,"model":"dell 7050","os":"win11","cpu":"i5- 7500","gen":7,"ram":8,"urgency":"בינוני - החלפה בעוד 3 שנים","action":"","year":2016},{"id":"c67","loc":"גן ניצנים","site":"טכנודע","count":1,"model":"Dell Optiplex 7050","os":"win10","cpu":"i7-7700","gen":7,"ram":4,"urgency":"בינוני - החלפה בעוד 3 שנים","action":"","year":2016},{"id":"c68","loc":"דוד","site":"טכנודע","count":1,"model":"Dell 7050","os":"win11","cpu":"i5-7500","gen":7,"ram":8,"urgency":"בינוני - החלפה בעוד 3 שנים","action":"","year":2016},{"id":"c69","loc":"חדר ישיבות","site":"טכנודע","count":1,"model":"DELL Optiplex 7050","os":"win10","cpu":"i7-7500","gen":7,"ram":8,"urgency":"בינוני - החלפה בעוד 3 שנים","action":"","year":2016},{"id":"c70","loc":"מוח נשימה","site":"טכנודע","count":1,"model":"","os":"win10","cpu":"i5-7300","gen":7,"ram":16,"urgency":"בינוני - החלפה בעוד 3 שנים","action":"","year":2016},{"id":"c71","loc":"צריבת לב חדש","site":"טכנודע","count":1,"model":"","os":"win10","cpu":"i5-7300","gen":7,"ram":16,"urgency":"בינוני - החלפה בעוד 3 שנים","action":"","year":2016},{"id":"c72","loc":"רכב שיכור","site":"טכנודע","count":1,"model":"","os":"win10","cpu":"i5-7300","gen":7,"ram":16,"urgency":"בינוני - החלפה בעוד 3 שנים","action":"","year":2016},{"id":"c73","loc":"אחזקה - יוסי","site":"טכנודע","count":1,"model":"DELL Optiplex 7060","os":"win11","cpu":"i5-8500","gen":8,"ram":8,"urgency":"נמוך - החלפה בעוד 4 שנים ומעלה","action":"","year":2017},{"id":"c74","loc":"אמבו","site":"טכנודע","count":1,"model":"","os":"win11","cpu":"i5-9500","gen":9,"ram":8,"urgency":"נמוך - החלפה בעוד 4 שנים ומעלה","action":"","year":2018},{"id":"c75","loc":"הנהלת חשבונות - אנג'לינה","site":"טכנודע","count":1,"model":"DELL Optiplex 7080","os":"win10","cpu":"i5-8500","gen":8,"ram":4,"urgency":"נמוך - החלפה בעוד 4 שנים ומעלה","action":"","year":2017},{"id":"c76","loc":"מעבדה - אמירה","site":"טכנודע","count":1,"model":"Dell optiplex7060","os":"win10","cpu":"i5-8500","gen":8,"ram":8,"urgency":"נמוך - החלפה בעוד 4 שנים ומעלה","action":"","year":2017},{"id":"c77","loc":"מעבדה - לירון","site":"טכנודע","count":1,"model":"Dell optiplex7060","os":"win10","cpu":"i5-8500","gen":8,"ram":8,"urgency":"נמוך - החלפה בעוד 4 שנים ומעלה","action":"","year":2017},{"id":"c78","loc":"משחק הדם הימני","site":"טכנודע","count":1,"model":"","os":"win11","cpu":"i5-9500","gen":9,"ram":8,"urgency":"נמוך - החלפה בעוד 4 שנים ומעלה","action":"","year":2018},{"id":"c79","loc":"משחק הדם השמאלי","site":"טכנודע","count":1,"model":"","os":"win11","cpu":"i5-9500","gen":9,"ram":8,"urgency":"נמוך - החלפה בעוד 4 שנים ומעלה","action":"","year":2018},{"id":"c80","loc":"עקיבת עין","site":"טכנודע","count":1,"model":"","os":"win10","cpu":"i5-8259","gen":8,"ram":8,"urgency":"נמוך - החלפה בעוד 4 שנים ומעלה","action":"","year":2017},{"id":"c81","loc":"שיווק 1","site":"טכנודע","count":1,"model":"DELL Optiplex 3070","os":"win10","cpu":"i5-9500","gen":9,"ram":8,"urgency":"נמוך - החלפה בעוד 4 שנים ומעלה","action":"","year":2018},{"id":"c82","loc":"שיווק 2","site":"טכנודע","count":1,"model":"DELL Optiplex 3070","os":"win10","cpu":"i5-9500","gen":9,"ram":8,"urgency":"נמוך - החלפה בעוד 4 שנים ומעלה","action":"","year":2018},{"id":"c83","loc":"מחשבים ניידים שי","site":"טכנודע","count":16,"model":"","os":"","cpu":"","gen":null,"ram":null,"urgency":"לא נדרשת החלפה בזמן הקרוב","action":"","year":null},{"id":"c84","loc":"מחשבים 2","site":"טכנודע","count":8,"model":"HP Prodesk G6","os":"win11","cpu":"i7-10700","gen":10,"ram":8,"urgency":"לא נדרשת החלפה בזמן הקרוב","action":"","year":2020},{"id":"c85","loc":"אורית","site":"טכנודע","count":1,"model":"DELL 3080","os":"win11","cpu":"i5 - 10505","gen":10,"ram":16,"urgency":"לא נדרשת החלפה בזמן הקרוב","action":"","year":2020},{"id":"c86","loc":"אלי","site":"טכנודע","count":1,"model":"Lenovo Thinkpad","os":"win11","cpu":"i9-10885","gen":10,"ram":32,"urgency":"לא נדרשת החלפה בזמן הקרוב","action":"","year":2020},{"id":"c87","loc":"דינה","site":"טכנודע","count":1,"model":"DELL Optiplex 7090","os":"win10","cpu":"i5-10505","gen":10,"ram":16,"urgency":"לא נדרשת החלפה בזמן הקרוב","action":"","year":2020},{"id":"c88","loc":"ויטה","site":"טכנודע","count":1,"model":"Dell 3080","os":"win10","cpu":"i5-10505","gen":10,"ram":8,"urgency":"לא נדרשת החלפה בזמן הקרוב","action":"","year":2020},{"id":"c89","loc":"זיהוי פלילי","site":"טכנודע","count":1,"model":"","os":"win10","cpu":"i3-10110","gen":10,"ram":8,"urgency":"לא נדרשת החלפה בזמן הקרוב","action":"","year":2020},{"id":"c90","loc":"טלוויזיה גדולה מרכז חץ","site":"טכנודע","count":1,"model":"","os":"win10","cpu":"i7-10700","gen":10,"ram":8,"urgency":"לא נדרשת החלפה בזמן הקרוב","action":"","year":2020},{"id":"c91","loc":"לב - מחזור גדול","site":"טכנודע","count":1,"model":"","os":"win10","cpu":"i3-10110","gen":10,"ram":4,"urgency":"לא נדרשת החלפה בזמן הקרוב","action":"","year":2020},{"id":"c92","loc":"מעבדה - דניאל","site":"טכנודע","count":1,"model":"HP Prodesk 600","os":"win10","cpu":"i7-10700","gen":10,"ram":8,"urgency":"לא נדרשת החלפה בזמן הקרוב","action":"","year":2020},{"id":"c93","loc":"מעבדה 3","site":"טכנודע","count":1,"model":"Intel NUC 11PAH","os":"win11","cpu":"i5-1135","gen":11,"ram":8,"urgency":"לא נדרשת החלפה בזמן הקרוב","action":"","year":2021},{"id":"c94","loc":"מעיין שוורצר","site":"טכנודע","count":1,"model":"HP Prodesk 600","os":"win11","cpu":"i7-10700","gen":10,"ram":8,"urgency":"לא נדרשת החלפה בזמן הקרוב","action":"","year":2020},{"id":"c95","loc":"מרים","site":"טכנודע","count":1,"model":"DELL Optiplex 7080","os":"win11","cpu":"i7-10700","gen":10,"ram":16,"urgency":"לא נדרשת החלפה בזמן הקרוב","action":"","year":2020},{"id":"c96","loc":"שיווק קרן Keren","site":"טכנודע","count":1,"model":"DELL","os":"win11","cpu":"i7-10700","gen":10,"ram":16,"urgency":"לא נדרשת החלפה בזמן הקרוב","action":"","year":2020},{"id":"c97","loc":"מחשבים 1","site":"טכנודע","count":21,"model":"Dell Protower QBT1250","os":"win11","cpu":"Core ultra 7 265","gen":15,"ram":16,"urgency":"מחשבים מעולים לשנים קדימה","action":"","year":2025},{"id":"c98","loc":"מחשבים 2","site":"טכנודע","count":17,"model":"DELL Optiplex 7010","os":"win11","cpu":"i7-13700","gen":13,"ram":16,"urgency":"מחשבים מעולים לשנים קדימה","action":"","year":2023},{"id":"c99","loc":"אלרגיה","site":"טכנודע","count":1,"model":"","os":"win11","cpu":"i5-13500","gen":13,"ram":8,"urgency":"מחשבים מעולים לשנים קדימה","action":"","year":2023},{"id":"c100","loc":"הנהלת חשבונות - רונית","site":"טכנודע","count":1,"model":"DELL Optiplex","os":"win11","cpu":"i5-13500","gen":13,"ram":16,"urgency":"מחשבים מעולים לשנים קדימה","action":"","year":2023},{"id":"c101","loc":"מעבדה 4","site":"טכנודע","count":1,"model":"Dell Optiplex Micro 7010","os":"win11","cpu":"i5-13500","gen":13,"ram":8,"urgency":"מחשבים מעולים לשנים קדימה","action":"","year":2023},{"id":"c102","loc":"משחק נוירונים","site":"טכנודע","count":1,"model":"","os":"win11","cpu":"i3-1215","gen":12,"ram":8,"urgency":"מחשבים מעולים לשנים קדימה","action":"","year":2022},{"id":"c103","loc":"נשימה במצבי קיצון","site":"טכנודע","count":1,"model":"","os":"win11","cpu":"i3-1315","gen":13,"ram":8,"urgency":"מחשבים מעולים לשנים קדימה","action":"","year":2023},{"id":"c104","loc":"ספיר","site":"טכנודע","count":1,"model":"Lenovo idepad 5","os":"win11","cpu":"i7-13620","gen":13,"ram":16,"urgency":"מחשבים מעולים לשנים קדימה","action":"","year":2023},{"id":"c105","loc":"שניר","site":"טכנודע","count":1,"model":"Dell 7010","os":"win11","cpu":"i7-13700","gen":13,"ram":16,"urgency":"מחשבים מעולים לשנים קדימה","action":"","year":2023},{"id":"c106","loc":"חדר מחשבים למעלה","site":"טכנודע ישן","count":8,"model":"Dell 7010","os":"win10","cpu":"i7-3770","gen":3,"ram":8,"urgency":"קריטי - החלפה מיידית","action":"להחליף במיידי","year":2012},{"id":"c107","loc":"חדר מחשבים למעלה","site":"טכנודע ישן","count":6,"model":"Dell 7010 קטנים","os":"win10","cpu":"i5-3470","gen":3,"ram":8,"urgency":"קריטי - החלפה מיידית","action":"להחליף במיידי","year":2012},{"id":"c108","loc":"חדר גדול אמצעי למעלה","site":"טכנודע ישן","count":1,"model":"Dell 7010","os":"win10","cpu":"i7-3770","gen":3,"ram":8,"urgency":"קריטי - החלפה מיידית","action":"להחליף במיידי","year":2012},{"id":"c109","loc":"חדר גדול ימני למעלה","site":"טכנודע ישן","count":1,"model":"Dell 7010","os":"win10","cpu":"i7-3770","gen":3,"ram":8,"urgency":"קריטי - החלפה מיידית","action":"להחליף במיידי","year":2012},{"id":"c110","loc":"חדר טלויזיה גדול למטה","site":"טכנודע ישן","count":1,"model":"Dell 7010","os":"win10","cpu":"i7-3770","gen":3,"ram":8,"urgency":"קריטי - החלפה מיידית","action":"להחליף במיידי","year":2012},{"id":"c111","loc":"חדר קטן למטה","site":"טכנודע ישן","count":1,"model":"Dell 7010","os":"win10","cpu":"i7-3770","gen":3,"ram":8,"urgency":"קריטי - החלפה מיידית","action":"להחליף במיידי","year":2012},{"id":"c112","loc":"חדר קטן למעלה","site":"טכנודע ישן","count":1,"model":"Dell 7010","os":"win10","cpu":"i7-3770","gen":3,"ram":8,"urgency":"קריטי - החלפה מיידית","action":"להחליף במיידי","year":2012},{"id":"c113","loc":"משרד למטה","site":"טכנודע ישן","count":1,"model":"Dell 7020","os":"win10","cpu":"i5-4590","gen":4,"ram":8,"urgency":"דחוף - החלפה בשנה הבאה","action":"להחליף במיידי","year":2013}];
+const NOW_YEAR = 2026;
+
+/* ============================ Firebase ============================ */
+const firebaseConfig = {
+  apiKey: "AIzaSyD-8V99l2wsfULodwAOnrvA5YezFCmojEo",
+  authDomain: "riddle-2eed9.firebaseapp.com",
+  databaseURL: "https://riddle-2eed9-default-rtdb.firebaseio.com",
+  projectId: "riddle-2eed9",
+  storageBucket: "riddle-2eed9.firebasestorage.app",
+  messagingSenderId: "912008376037",
+  appId: "1:912008376037:web:4c440895bf27ac45076e0c"
+};
+const ROOT = "technoda";
+let db = null, online = false;
+
+const LS_KEY = "technoda_state_v1";
+let state = { computers: {}, zones: {} };
+
+function setConn(txt, cls){
+  const el = document.getElementById("conn");
+  el.textContent = txt; el.className = cls || "";
+}
+
+function initFirebase(){
+  return new Promise(resolve => {
+    try{
+      firebase.initializeApp(firebaseConfig);
+      db = firebase.database();
+      let settled = false;
+      firebase.database().ref(".info/connected").on("value", s => {
+        online = !!s.val();
+        if (online) setConn("● מחובר ל-Firebase", "ok");
+        else setConn("● לא מחובר — עובד מקומית", "off");
+        if (!settled){ settled = true; resolve(online); }
+      });
+      setTimeout(()=>{ if(!settled){ settled=true; resolve(false);} }, 6000);
+    }catch(e){
+      console.warn("firebase init failed", e);
+      setConn("● מצב מקומי", "off");
+      resolve(false);
+    }
+  });
+}
+
+/* ============================ עזרי נתונים ============================ */
+function ageOf(c){ return (c.year ? NOW_YEAR - c.year : null); }
+
+function ageColor(a){
+  if (a === null || a === undefined) return "var(--a0)";
+  if (a >= 12) return "var(--a1)";
+  if (a >= 9)  return "var(--a3)";
+  if (a >= 6)  return "var(--a5)";
+  if (a >= 3)  return "var(--a6)";
+  return "var(--a8)";
+}
+
+function autoType(c){
+  const m = (c.model||"").toLowerCase();
+  const loc = (c.loc||"");
+  const cpu = (c.cpu||"").toLowerCase().replace(/\s/g,"");
+  if (/thinkpad|latitude|ideapad|idepad|hp250|notebook|laptop|nuc/.test(m) || /נייד/.test(loc)) return 2;
+  if (/i7-|i9-|coreultra|ultra/.test(cpu) || /protower/.test(m)) return 3;
+  return 1;
+}
+const TYPE_NAMES = {1:"סוג 1 — נייח משרדי", 2:"סוג 2 — נייד משרדי", 3:"סוג 3 — נייח מעבד חזק לחוגים"};
+const TYPE_SHORT = {1:"נייח משרדי", 2:"נייד משרדי", 3:"נייח מעבד חזק לחוגים"};
+
+function normalize(list){
+  const out = {};
+  list.forEach(c => {
+    out[c.id] = Object.assign({}, c, {
+      type: c.type || autoType(c),
+      zone: c.zone || "",
+      note: c.note || ""
+    });
+  });
+  return out;
+}
+
+function comps(){ return Object.values(state.computers); }
+function zoneList(){
+  return Object.entries(state.zones)
+    .map(([id,z]) => ({id, name:z.name, order:z.order||0}))
+    .sort((a,b)=> a.order - b.order || a.name.localeCompare(b.name,"he"));
+}
+
+/* ============================ שמירה ============================ */
+let saveTimer = null;
+function persist(){
+  localStorage.setItem(LS_KEY, JSON.stringify(state));
+  if (!db || !online) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(()=>{
+    db.ref(ROOT).set({ computers: state.computers, zones: state.zones, updatedAt: Date.now() })
+      .catch(e => console.warn("save failed", e));
+  }, 400);
+}
+
+async function loadState(){
+  const ok = await initFirebase();
+  if (ok){
+    try{
+      const snap = await db.ref(ROOT).get();
+      const val = snap.val();
+      if (val && val.computers && Object.keys(val.computers).length){
+        state.computers = val.computers;
+        state.zones = val.zones || {};
+        Object.values(state.computers).forEach(c=>{
+          if(!c.type) c.type = autoType(c);
+          if(c.zone===undefined) c.zone="";
+          if(c.note===undefined) c.note="";
+        });
+        toast("נטענו נתונים מ-Firebase");
+        return;
+      }
+      state.computers = normalize(SEED);
+      state.zones = {};
+      await db.ref(ROOT).set({computers:state.computers, zones:state.zones, updatedAt:Date.now()});
+      toast("Firebase היה ריק — נדחפו " + SEED.length + " עמדות מהמיפוי");
+      return;
+    }catch(e){
+      console.warn("firebase read failed", e);
+      setConn("● מצב מקומי (שגיאת חיבור)", "off");
+      online = false;
+    }
+  }
+  const local = localStorage.getItem(LS_KEY);
+  if (local){
+    try{
+      const p = JSON.parse(local);
+      if (p.computers && Object.keys(p.computers).length){
+        state = p;
+        toast("נטען מהאחסון המקומי");
+        return;
+      }
+    }catch(e){}
+  }
+  state.computers = normalize(SEED);
+  state.zones = {};
+  persist();
+}
+
+/* ============================ רינדור ============================ */
+function passFilter(c){
+  const q = document.getElementById("q").value.trim().toLowerCase();
+  const fu = document.getElementById("fUrg").value;
+  const ft = document.getElementById("fType").value;
+  const fa = document.getElementById("fAge").value;
+  if (q){
+    const hay = [c.loc,c.model,c.cpu,c.os,c.urgency,c.action,c.note].join(" ").toLowerCase();
+    if (!hay.includes(q)) return false;
+  }
+  if (fu && c.urgency !== fu) return false;
+  if (ft && String(c.type) !== ft) return false;
+  if (fa){
+    const a = ageOf(c);
+    if (a === null) return false;
+    const n = parseInt(fa,10);
+    if (n < 0){ if (a > -n) return false; }
+    else if (a < n) return false;
+  }
+  return true;
+}
+
+function cardHTML(c){
+  const a = ageOf(c);
+  const ageTxt = a === null ? "גיל לא ידוע" : ("בן " + a + " שנים");
+  return `<div class="card" draggable="true" data-id="${c.id}" style="border-inline-start-color:${ageColor(a)}">
+    <div class="t">
+      <span class="name">${esc(c.loc)}</span>
+      <span class="qty">${c.count}</span>
+    </div>
+    <div class="meta">${esc(c.model || "—")} · ${esc(c.cpu || "ללא נתון")} · ${esc(c.os||"")}</div>
+    <div class="tags">
+      <span class="tag age" style="background:${ageColor(a)};color:#fff">${ageTxt}</span>
+      ${c.gen ? `<span class="tag gen">דור ${c.gen}${c.year? " · "+c.year : ""}</span>` : ""}
+      ${c.site === "טכנודע ישן" ? `<span class="tag site">טכנודע ישן</span>` : ""}
+      ${c.action ? `<span class="tag act">${esc(c.action)}</span>` : ""}
+    </div>
+    <div class="row2">
+      <select data-type="${c.id}" title="סוג מחשב">
+        <option value="1"${c.type==1?" selected":""}>סוג 1 — נייח משרדי</option>
+        <option value="2"${c.type==2?" selected":""}>סוג 2 — נייד משרדי</option>
+        <option value="3"${c.type==3?" selected":""}>סוג 3 — מעבד חזק</option>
+      </select>
+      <input class="note" data-note="${c.id}" placeholder="בעיות / הערות" value="${esc(c.note||"")}">
+      <button class="sm ghost" data-split="${c.id}" title="פיצול קבוצה">✂️</button>
+    </div>
+  </div>`;
+}
+
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+function render(){
+  const all = comps();
+  const shown = all.filter(passFilter);
+
+  // pool
+  const poolItems = shown.filter(c => !c.zone).sort(sortCards);
+  const pool = document.getElementById("pool");
+  pool.innerHTML = poolItems.length ? poolItems.map(cardHTML).join("")
+    : `<div class="empty">אין מחשבים לא משויכים${all.some(c=>!c.zone)?" בסינון הנוכחי":""}</div>`;
+  const poolTotal = all.filter(c=>!c.zone).reduce((s,c)=>s+c.count,0);
+  document.getElementById("poolCnt").textContent = poolItems.length + " עמדות · " + poolTotal + " מחשבים";
+
+  // zones
+  const zs = zoneList();
+  const zc = document.getElementById("zones");
+  zc.innerHTML = zs.length ? zs.map(z => {
+    const items = shown.filter(c => c.zone === z.id).sort(sortCards);
+    const tot = all.filter(c=>c.zone===z.id).reduce((s,c)=>s+c.count,0);
+    return `<div class="zone">
+      <header>
+        <span class="zname" data-zn="${z.id}" title="לחיצה כפולה לשינוי שם">${esc(z.name)}</span>
+        <span class="zc">${tot} מחשבים</span>
+        <button class="sm ghost" data-zrename="${z.id}">✏️</button>
+        <button class="sm danger" data-zdel="${z.id}">🗑️</button>
+      </header>
+      <div class="drop" data-zone="${z.id}">
+        ${items.length ? items.map(cardHTML).join("") : `<div class="empty">גרור לכאן מחשבים</div>`}
+      </div>
+    </div>`;
+  }).join("") : `<div class="panel"><div class="empty">עדיין לא יצרת מתחמים — לחץ על «➕ מתחם חדש» כדי להתחיל</div></div>`;
+
+  // kpis
+  const total = all.reduce((s,c)=>s+c.count,0);
+  const assigned = all.filter(c=>c.zone).reduce((s,c)=>s+c.count,0);
+  let wSum=0, wCnt=0;
+  all.forEach(c=>{ const a=ageOf(c); if(a!==null){ wSum += a*c.count; wCnt += c.count; } });
+  document.getElementById("kTotal").textContent = total;
+  document.getElementById("kRows").textContent = all.length;
+  document.getElementById("kAssigned").textContent = assigned;
+  document.getElementById("kAge").textContent = wCnt ? (wSum/wCnt).toFixed(1) : "—";
+
+  wireCards();
+}
+
+function sortCards(a,b){
+  const aa = ageOf(a), bb = ageOf(b);
+  if (aa === null) return 1;
+  if (bb === null) return -1;
+  return bb - aa || b.count - a.count || a.loc.localeCompare(b.loc,"he");
+}
+
+/* ============================ גרירה ושחרור ============================ */
+let dragId = null;
+function wireCards(){
+  document.querySelectorAll(".card").forEach(el => {
+    el.addEventListener("dragstart", e => {
+      dragId = el.dataset.id;
+      el.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", dragId);
+    });
+    el.addEventListener("dragend", () => { el.classList.remove("dragging"); dragId = null; });
+  });
+  document.querySelectorAll("[data-type]").forEach(sel => {
+    sel.addEventListener("change", () => {
+      state.computers[sel.dataset.type].type = parseInt(sel.value,10);
+      persist();
+    });
+  });
+  document.querySelectorAll("[data-note]").forEach(inp => {
+    inp.addEventListener("change", () => {
+      state.computers[inp.dataset.note].note = inp.value;
+      persist();
+    });
+  });
+  document.querySelectorAll("[data-split]").forEach(b => {
+    b.addEventListener("click", () => splitDialog(b.dataset.split));
+  });
+  document.querySelectorAll("[data-zrename]").forEach(b => {
+    b.addEventListener("click", () => renameZone(b.dataset.zrename));
+  });
+  document.querySelectorAll("[data-zn]").forEach(el => {
+    el.addEventListener("dblclick", () => renameZone(el.dataset.zn));
+  });
+  document.querySelectorAll("[data-zdel]").forEach(b => {
+    b.addEventListener("click", () => deleteZone(b.dataset.zdel));
+  });
+}
+
+document.addEventListener("dragover", e => {
+  const d = e.target.closest(".drop");
+  if (!d) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "move";
+  document.querySelectorAll(".drop.over").forEach(x => x.classList.remove("over"));
+  d.classList.add("over");
+});
+document.addEventListener("dragleave", e => {
+  const d = e.target.closest(".drop");
+  if (d && !d.contains(e.relatedTarget)) d.classList.remove("over");
+});
+document.addEventListener("drop", e => {
+  const d = e.target.closest(".drop");
+  if (!d) return;
+  e.preventDefault();
+  d.classList.remove("over");
+  const id = dragId || e.dataTransfer.getData("text/plain");
+  if (!id || !state.computers[id]) return;
+  state.computers[id].zone = d.dataset.zone || "";
+  persist(); render();
+});
+
+/* ============================ מתחמים ============================ */
+function newZone(){
+  openDialog("מתחם חדש",
+    `<label style="display:block;font-size:13px;margin-bottom:6px">שם המתחם</label>
+     <input type="text" id="zn" style="width:100%" placeholder="למשל: מעבדות קומה עליונה">`,
+    [{txt:"צור", cls:"", fn:()=>{
+        const v = document.getElementById("zn").value.trim();
+        if (!v) return;
+        const id = "z" + Date.now().toString(36);
+        state.zones[id] = { name:v, order: Object.keys(state.zones).length };
+        persist(); render(); closeDialog(); toast("נוצר מתחם: " + v);
+      }},
+     {txt:"ביטול", cls:"ghost", fn:closeDialog}]);
+  setTimeout(()=>document.getElementById("zn").focus(),50);
+}
+
+function renameZone(id){
+  const z = state.zones[id]; if (!z) return;
+  openDialog("שינוי שם מתחם",
+    `<input type="text" id="zn" style="width:100%" value="${esc(z.name)}">`,
+    [{txt:"שמור", cls:"", fn:()=>{
+        const v = document.getElementById("zn").value.trim();
+        if (v){ z.name = v; persist(); render(); }
+        closeDialog();
+      }},
+     {txt:"ביטול", cls:"ghost", fn:closeDialog}]);
+  setTimeout(()=>{const i=document.getElementById("zn"); i.focus(); i.select();},50);
+}
+
+function deleteZone(id){
+  const z = state.zones[id]; if (!z) return;
+  const n = comps().filter(c=>c.zone===id).length;
+  openDialog("מחיקת מתחם",
+    `<p>למחוק את המתחם <b>${esc(z.name)}</b>?</p>
+     <p style="color:var(--muted);font-size:13px;margin-top:8px">${n} עמדות יחזרו לרשימת הלא-משויכים. הנתונים עצמם לא נמחקים.</p>`,
+    [{txt:"מחק", cls:"danger", fn:()=>{
+        comps().forEach(c=>{ if(c.zone===id) c.zone=""; });
+        delete state.zones[id];
+        persist(); render(); closeDialog(); toast("המתחם נמחק");
+      }},
+     {txt:"ביטול", cls:"ghost", fn:closeDialog}]);
+}
+
+function splitDialog(id){
+  const c = state.computers[id];
+  if (!c || c.count < 2){ toast("אפשר לפצל רק קבוצה של 2 מחשבים ומעלה"); return; }
+  openDialog("פיצול קבוצה — " + esc(c.loc),
+    `<p style="font-size:13px;color:var(--muted);margin-bottom:10px">בקבוצה ${c.count} מחשבים. כמה להוציא לכרטיס נפרד?</p>
+     <input type="number" id="sn" min="1" max="${c.count-1}" value="1" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px">`,
+    [{txt:"פצל", cls:"", fn:()=>{
+        const n = parseInt(document.getElementById("sn").value,10);
+        if (!n || n<1 || n>=c.count) return;
+        const nid = c.id + "_s" + Date.now().toString(36);
+        state.computers[nid] = Object.assign({}, c, {id:nid, count:n, zone:c.zone});
+        c.count -= n;
+        persist(); render(); closeDialog(); toast("פוצלו " + n + " מחשבים");
+      }},
+     {txt:"ביטול", cls:"ghost", fn:closeDialog}]);
+}
+
+/* ============================ דיאלוג + טוסט ============================ */
+const dlg = document.getElementById("dlg");
+function openDialog(title, bodyHTML, buttons){
+  document.getElementById("dlgTitle").textContent = title;
+  document.getElementById("dlgBody").innerHTML = bodyHTML;
+  const f = document.getElementById("dlgFoot"); f.innerHTML = "";
+  buttons.forEach(b => {
+    const btn = document.createElement("button");
+    btn.textContent = b.txt; if (b.cls) btn.className = b.cls;
+    btn.onclick = b.fn; f.appendChild(btn);
+  });
+  dlg.showModal();
+}
+function closeDialog(){ dlg.close(); }
+
+let toastTimer;
+function toast(msg){
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove("show"), 3200);
+}
+
+/* ============================ ייצוא לאקסל ============================ */
+async function exportXlsx(){
+  const wbk = new ExcelJS.Workbook();
+  wbk.creator = "מערכת ניהול מחשבים - טכנודע";
+
+  /* ---- גיליון 1: סטטוס מחשב בטכנודע (מבנה export.png) ---- */
+  const ws = wbk.addWorksheet("סטטוס מחשב", { views:[{rightToLeft:true, state:"frozen", ySplit:3}] });
+
+  const groups = [1,2,3];
+  const subs = ["כמות מחשבים כללית","דגם","שנת רכישה","כמות","בעיות"];
+  const header2 = ["מיקום"], header3 = [""];
+  groups.forEach(g => { header2.push(TYPE_NAMES[g],"","","",""); subs.forEach(s=>header3.push(s)); });
+
+  ws.addRow(["סטטוס מחשב בטכנודע"]);
+  ws.addRow(header2);
+  ws.addRow(header3);
+
+  const LASTCOL = 1 + groups.length*subs.length; // 16
+  ws.mergeCells(1,1,1,LASTCOL);
+  ws.mergeCells(2,1,3,1);
+  groups.forEach((g,i) => { const s = 2 + i*subs.length; ws.mergeCells(2,s,2,s+subs.length-1); });
+
+  const zs = zoneList();
+  const buckets = zs.map(z => ({name:z.name, items: comps().filter(c=>c.zone===z.id)}));
+  const un = comps().filter(c=>!c.zone);
+  if (un.length) buckets.push({name:"ללא שיוך למתחם", items:un});
+
+  const totals = {};
+  buckets.forEach(b => {
+    const row = [b.name];
+    groups.forEach(g => {
+      const it = b.items.filter(c => c.type == g);
+      const tot = it.reduce((s,c)=>s+c.count,0);
+      totals[g] = (totals[g]||0) + tot;
+      row.push(
+        tot || "",
+        it.map(c=>c.model||"—").join(" / "),
+        it.map(c=>c.year||"—").join(" / "),
+        it.map(c=>c.count).join(" / "),
+        it.map(c=>c.note).filter(Boolean).join(" · ")
+      );
+    });
+    ws.addRow(row);
+  });
+
+  const totRow = ["סה\"כ"];
+  groups.forEach(g => totRow.push(totals[g]||0,"","","",""));
+  ws.addRow(totRow);
+
+  const lastRow = ws.rowCount;
+  const GC = ["FF0B5FA5","FF176FBF","FF2E86D6"];
+  ws.getRow(1).height = 26;
+  styleCell(ws.getCell(1,1), {bold:true, size:14, fill:"FF20344A", font:"FFFFFFFF", center:true});
+  for (let c=1;c<=LASTCOL;c++){
+    if (c===1) styleCell(ws.getCell(2,c), {bold:true, fill:"FF4A5A6A", font:"FFFFFFFF", center:true});
+    else {
+      const gi = Math.floor((c-2)/subs.length);
+      styleCell(ws.getCell(2,c), {bold:true, fill:GC[gi], font:"FFFFFFFF", center:true});
+      styleCell(ws.getCell(3,c), {bold:true, fill:"FFE8EEF5", center:true, size:10});
+    }
+  }
+  for (let r=4;r<=lastRow;r++){
+    for (let c=1;c<=LASTCOL;c++){
+      const cell = ws.getCell(r,c);
+      cell.border = box();
+      if (c===1) cell.font = {bold:true, name:"Arial", size:11};
+      else cell.alignment = {horizontal:"center", vertical:"middle", wrapText:true};
+      if (r===lastRow) styleCell(cell, {bold:true, fill:"FFD9D9D9"});
+    }
+  }
+  ws.getColumn(1).width = 30;
+  for (let c=2;c<=LASTCOL;c++){
+    const k = (c-2) % subs.length;
+    ws.getColumn(c).width = [16,26,14,12,24][k];
+  }
+
+  /* ---- גיליון 2: פירוט מלא ---- */
+  const d = wbk.addWorksheet("פירוט מלא", { views:[{rightToLeft:true, state:"frozen", ySplit:1}] });
+  d.addRow(["מתחם","מיקום","סוג מחשב","כמות","דגם","מערכת הפעלה","מעבד","דור","שנת רכישה משוערת","גיל (שנים)","זכרון","דחיפות החלפה","המלצה לביצוע","בעיות / הערות","מתחם מקורי"]);
+  const zname = {}; zs.forEach(z => zname[z.id] = z.name);
+  comps().sort((a,b)=>{
+    const za = a.zone? zname[a.zone] : "￿", zb = b.zone? zname[b.zone] : "￿";
+    return za.localeCompare(zb,"he") || sortCards(a,b);
+  }).forEach(c => {
+    const a = ageOf(c);
+    d.addRow([ c.zone ? zname[c.zone] : "ללא שיוך", c.loc, TYPE_SHORT[c.type], c.count,
+      c.model||"", c.os||"", c.cpu||"", c.gen||"", c.year||"", a===null?"":a, c.ram||"",
+      c.urgency||"", c.action||"", c.note||"", c.site||"" ]);
+  });
+  d.getRow(1).eachCell(c => styleCell(c, {bold:true, fill:"FF0B5FA5", font:"FFFFFFFF", center:true}));
+  [22,28,20,8,24,12,14,7,12,10,9,28,20,24,14].forEach((w,i)=> d.getColumn(i+1).width = w);
+  d.eachRow((row,i)=>{ if(i>1) row.eachCell(c => c.border = box()); });
+  d.autoFilter = { from:{row:1,column:1}, to:{row:d.rowCount,column:15} };
+
+  /* ---- גיליון 3: סיכום גילאים ---- */
+  const s = wbk.addWorksheet("סיכום", { views:[{rightToLeft:true}] });
+  s.addRow(["טווח גיל","מחשבים","עמדות","אחוז"]);
+  const bands = [
+    ["12 שנים ומעלה", a=>a!==null&&a>=12],
+    ["9–11 שנים",     a=>a!==null&&a>=9&&a<12],
+    ["6–8 שנים",      a=>a!==null&&a>=6&&a<9],
+    ["3–5 שנים",      a=>a!==null&&a>=3&&a<6],
+    ["עד שנתיים",     a=>a!==null&&a<3],
+    ["ללא נתון",      a=>a===null]
+  ];
+  const tot = comps().reduce((x,c)=>x+c.count,0);
+  bands.forEach(([label,test])=>{
+    const it = comps().filter(c=>test(ageOf(c)));
+    const n = it.reduce((x,c)=>x+c.count,0);
+    s.addRow([label, n, it.length, tot? n/tot : 0]);
+  });
+  s.addRow(["סה\"כ", tot, comps().length, 1]);
+  s.getColumn(4).numFmt = "0.0%";
+  s.getRow(1).eachCell(c => styleCell(c, {bold:true, fill:"FF0B5FA5", font:"FFFFFFFF", center:true}));
+  s.getRow(s.rowCount).eachCell(c => styleCell(c, {bold:true, fill:"FFD9D9D9"}));
+  [22,12,12,12].forEach((w,i)=> s.getColumn(i+1).width = w);
+  s.eachRow(r => r.eachCell(c => c.border = box()));
+
+  const buf = await wbk.xlsx.writeBuffer();
+  const blob = new Blob([buf], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "סטטוס מחשבים - טכנודע " + new Date().toISOString().slice(0,10) + ".xlsx";
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+  toast("הקובץ יוצא בהצלחה");
+}
+
+function styleCell(cell, o){
+  if (o.fill) cell.fill = {type:"pattern", pattern:"solid", fgColor:{argb:o.fill}};
+  cell.font = {bold:!!o.bold, size:o.size||11, name:"Arial", color:{argb:o.font||"FF1F2933"}};
+  cell.alignment = {horizontal:o.center?"center":"right", vertical:"middle", wrapText:true};
+  cell.border = box();
+}
+function box(){
+  const t = {style:"thin", color:{argb:"FFB8C2CC"}};
+  return {top:t,left:t,bottom:t,right:t};
+}
+
+/* ============================ אתחול ============================ */
+document.getElementById("bNewZone").onclick = newZone;
+document.getElementById("bExport").onclick = () => exportXlsx().catch(e=>{console.error(e); toast("שגיאה בייצוא: "+e.message);});
+document.getElementById("bReset").onclick = () => {
+  openDialog("טעינה מחדש מהמיפוי",
+    `<p>לאפס את כל הנתונים ולטעון מחדש את ${SEED.length} העמדות מטבלת המיפוי?</p>
+     <p style="color:var(--muted);font-size:13px;margin-top:8px">שיוכי המתחמים, סוגי המחשבים וההערות יימחקו.</p>`,
+    [{txt:"אפס וטען", cls:"danger", fn:()=>{
+        state.computers = normalize(SEED); state.zones = {};
+        persist(); render(); closeDialog(); toast("הנתונים נטענו מחדש");
+      }},
+     {txt:"ביטול", cls:"ghost", fn:closeDialog}]);
+};
+["q","fUrg","fType","fAge"].forEach(id => {
+  const el = document.getElementById(id);
+  el.addEventListener(el.tagName==="INPUT" ? "input" : "change", render);
+});
+
+(async function start(){
+  await loadState();
+  const urgs = [...new Set(comps().map(c=>c.urgency).filter(Boolean))];
+  const sel = document.getElementById("fUrg");
+  urgs.forEach(u => { const o=document.createElement("option"); o.value=u; o.textContent=u; sel.appendChild(o); });
+  render();
+})();
+</script>
+</body>
+</html>

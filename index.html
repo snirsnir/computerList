@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>תוכנית עבודה - החלפת מחשבים טכנודע</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    color: #333;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    padding: 40px 20px;
+  }
+  .container {
+    max-width: 1000px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+    overflow: hidden;
+  }
+  .header {
+    background: linear-gradient(135deg, #003d7a 0%, #0066cc 100%);
+    color: white;
+    padding: 60px 40px;
+    text-align: center;
+  }
+  .header h1 {
+    font-size: 32px;
+    margin-bottom: 10px;
+  }
+  .header p {
+    font-size: 16px;
+    opacity: 0.95;
+  }
+  .content {
+    padding: 40px;
+  }
+  .summary-box {
+    background: #f0f4f8;
+    border-right: 4px solid #0066cc;
+    padding: 25px;
+    margin-bottom: 40px;
+    border-radius: 8px;
+  }
+  .summary-box h2 {
+    color: #0066cc;
+    margin-bottom: 15px;
+    font-size: 20px;
+  }
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-top: 15px;
+  }
+  .summary-item {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    text-align: center;
+    border-top: 3px solid #0066cc;
+  }
+  .summary-item .number {
+    font-size: 28px;
+    font-weight: bold;
+    color: #0066cc;
+  }
+  .summary-item .label {
+    font-size: 13px;
+    color: #666;
+    margin-top: 8px;
+  }
+  .phases {
+    margin-bottom: 40px;
+  }
+  .phase {
+    margin-bottom: 30px;
+    border-left: 4px solid #0066cc;
+    padding-left: 25px;
+    padding-top: 15px;
+    padding-bottom: 15px;
+  }
+  .phase.phase1 { border-left-color: #d32f2f; }
+  .phase.phase2 { border-left-color: #f57c00; }
+  .phase.phase3 { border-left-color: #388e3c; }
+  .phase h3 {
+    font-size: 18px;
+    margin-bottom: 10px;
+    color: #1a1a1a;
+  }
+  .phase .subtitle {
+    color: #666;
+    font-size: 14px;
+    margin-bottom: 12px;
+  }
+  .phase-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 15px;
+    margin-top: 12px;
+  }
+  .stat {
+    background: #f5f5f5;
+    padding: 12px;
+    border-radius: 6px;
+    text-align: center;
+  }
+  .stat .value {
+    font-size: 22px;
+    font-weight: bold;
+    color: #0066cc;
+  }
+  .stat .label {
+    font-size: 12px;
+    color: #666;
+    margin-top: 4px;
+  }
+  .table-wrapper {
+    margin: 40px 0;
+    overflow-x: auto;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    font-size: 14px;
+  }
+  table thead {
+    background: #0066cc;
+    color: white;
+  }
+  table th {
+    padding: 15px;
+    text-align: right;
+    font-weight: 600;
+  }
+  table td {
+    padding: 12px 15px;
+    border-bottom: 1px solid #eee;
+  }
+  table tbody tr:hover {
+    background: #f9f9f9;
+  }
+  table tbody tr:nth-child(even) {
+    background: #fafafa;
+  }
+  .total-row {
+    background: #e3f2fd;
+    font-weight: bold;
+    border-top: 2px solid #0066cc;
+  }
+  .total-row td {
+    border-bottom: 2px solid #0066cc;
+  }
+  .chart {
+    margin: 30px 0;
+    padding: 20px;
+    background: #f9f9f9;
+    border-radius: 8px;
+  }
+  .bar-chart {
+    display: flex;
+    gap: 30px;
+    margin-top: 20px;
+    align-items: flex-end;
+  }
+  .bar {
+    flex: 1;
+    text-align: center;
+  }
+  .bar-fill {
+    background: #0066cc;
+    height: 150px;
+    border-radius: 4px 4px 0 0;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 16px;
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+  }
+  .bar.bar1 .bar-fill { background: #d32f2f; height: 100px; }
+  .bar.bar2 .bar-fill { background: #f57c00; height: 50px; }
+  .bar.bar3 .bar-fill { background: #388e3c; height: 150px; }
+  .bar-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #333;
+  }
+  .notes {
+    background: #fff3e0;
+    border-right: 4px solid #f57c00;
+    padding: 20px;
+    margin-top: 30px;
+    border-radius: 8px;
+  }
+  .notes h4 {
+    color: #e65100;
+    margin-bottom: 10px;
+  }
+  .notes ul {
+    list-style: none;
+    padding: 0;
+  }
+  .notes li {
+    padding: 6px 0;
+    font-size: 14px;
+    color: #666;
+  }
+  .notes li:before {
+    content: "✓ ";
+    color: #f57c00;
+    font-weight: bold;
+    margin-left: -15px;
+    margin-right: 10px;
+  }
+  .cta {
+    background: #e3f2fd;
+    border: 2px solid #0066cc;
+    padding: 20px;
+    border-radius: 8px;
+    text-align: center;
+    margin-top: 30px;
+  }
+  .cta p {
+    font-size: 14px;
+    color: #0066cc;
+    margin-bottom: 12px;
+  }
+  .highlight {
+    background: #fff59d;
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+  .footer {
+    background: #f5f5f5;
+    padding: 30px 40px;
+    text-align: center;
+    font-size: 13px;
+    color: #999;
+    border-top: 1px solid #eee;
+  }
+  @media print {
+    body { background: white; }
+    .container { box-shadow: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h1>תוכנית עבודה רב-שנתית</h1>
+    <p>החלפת מחשבים בטכנודע 2026–2028</p>
+  </div>
+
+  <div class="content">
+
+    <div class="summary-box">
+      <h2>סיכום בעמוד אחד</h2>
+      <div class="summary-grid">
+        <div class="summary-item">
+          <div class="number">92</div>
+          <div class="label">עמדות שייפתרו</div>
+        </div>
+        <div class="summary-item">
+          <div class="number">82</div>
+          <div class="label">מחשבים לרכישה</div>
+        </div>
+        <div class="summary-item">
+          <div class="number">₪395,000</div>
+          <div class="label">תקציב כולל</div>
+        </div>
+        <div class="summary-item">
+          <div class="number">3</div>
+          <div class="label">שלבים</div>
+        </div>
+      </div>
+    </div>
+
+    <h2 style="font-size: 22px; margin-bottom: 25px; color: #1a1a1a;">תוכנית עבודה מפורטת</h2>
+
+    <div class="phases">
+
+      <div class="phase phase1">
+        <h3>🔴 שלב א' | עד סוף 2026</h3>
+        <div class="subtitle">מעבדת הטכנולוגיה — החלפה מקיפה</div>
+        <p style="color: #666; margin-bottom: 12px;">
+          החלפת כל <span class="highlight">26 מחשבי הטכנולוגיה</span> (25 עמדות תלמידים + עמדת המורה).
+          רוב העמדות הן DELL Optiplex 7010 עם מעבד i7-3770 מדור 3, בנות כ-13 שנה, על Windows 10 שהסתיימה תמיכתו.
+          מדובר בעמדות הוראה בשימוש יומיומי אינטנסיבי.
+        </p>
+        <div class="phase-stats">
+          <div class="stat">
+            <div class="value">26</div>
+            <div class="label">מחשבים לרכישה</div>
+          </div>
+          <div class="stat">
+            <div class="value">36</div>
+            <div class="label">עמדות שייפתרו</div>
+          </div>
+          <div class="stat">
+            <div class="value">₪143,000</div>
+            <div class="label">עלות</div>
+          </div>
+          <div class="stat">
+            <div class="value">10</div>
+            <div class="label">מחשבים לשימוש חוזר</div>
+          </div>
+        </div>
+        <p style="color: #999; font-size: 13px; margin-top: 15px;">
+          <strong>החלפה:</strong> 10 מחשבי Lenovo ThinkCentre מתרומה (הנמצאים כרגע במעבדת הטכנולוגיה) יושמרו ויועברו לעמדות קריטיות אחרות במקום לגרוט אותם.
+        </p>
+      </div>
+
+      <div class="phase phase2">
+        <h3>🟠 שלב ב' | עד סוף 2027</h3>
+        <div class="subtitle">השלמת גזרת הדחוף (שורות 3–29)</div>
+        <p style="color: #666; margin-bottom: 12px;">
+          השלמת כל העמדות הקריטיות והדחופות — מעבדים מדור 3-5. לאחר שלב א', נותרו <span class="highlight">14 עמדות</span> בלבד הדורשות רכישה.
+        </p>
+        <div class="phase-stats">
+          <div class="stat">
+            <div class="value">14</div>
+            <div class="label">מחשבים לרכישה</div>
+          </div>
+          <div class="stat">
+            <div class="value">14</div>
+            <div class="label">עמדות שייפתרו</div>
+          </div>
+          <div class="stat">
+            <div class="value">₪63,000</div>
+            <div class="label">עלות</div>
+          </div>
+          <div class="stat">
+            <div class="value">₪4,500</div>
+            <div class="label">למחשב</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="phase phase3">
+        <h3>🟢 שלב ג' | עד סוף 2028</h3>
+        <div class="subtitle">גזרת דור 6 (שורות 30–61)</div>
+        <p style="color: #666; margin-bottom: 12px;">
+          החלפת כלל העמדות מדור 6 — בעיקר תערוכות ומעבדות חינוכיות (חיידקים, חדר רכזים, משחקי נוירונים ועוד).
+          <span class="highlight">42 עמדות</span> בעומס שימוש בינוני לנמוך.
+        </p>
+        <div class="phase-stats">
+          <div class="stat">
+            <div class="value">42</div>
+            <div class="label">מחשבים לרכישה</div>
+          </div>
+          <div class="stat">
+            <div class="value">42</div>
+            <div class="label">עמדות שייפתרו</div>
+          </div>
+          <div class="stat">
+            <div class="value">₪189,000</div>
+            <div class="label">עלות</div>
+          </div>
+          <div class="stat">
+            <div class="value">₪4,500</div>
+            <div class="label">למחשב</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="table-wrapper">
+      <h3 style="font-size: 18px; margin-bottom: 15px;">סיכום תקציבי מפורט</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>שלב</th>
+            <th>תקופה</th>
+            <th>עמדות שייפתרו</th>
+            <th>מחשבים לרכישה</th>
+            <th>עלות למחשב</th>
+            <th>עלות כוללת</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>א'</strong></td>
+            <td>2026</td>
+            <td>36</td>
+            <td>26</td>
+            <td>₪5,500</td>
+            <td><strong>₪143,000</strong></td>
+          </tr>
+          <tr>
+            <td><strong>ב'</strong></td>
+            <td>2027</td>
+            <td>14</td>
+            <td>14</td>
+            <td>₪4,500</td>
+            <td><strong>₪63,000</strong></td>
+          </tr>
+          <tr>
+            <td><strong>ג'</strong></td>
+            <td>2028</td>
+            <td>42</td>
+            <td>42</td>
+            <td>₪4,500</td>
+            <td><strong>₪189,000</strong></td>
+          </tr>
+          <tr class="total-row">
+            <td colspan="2"><strong>סה"כ</strong></td>
+            <td><strong>92</strong></td>
+            <td><strong>82</strong></td>
+            <td></td>
+            <td><strong>₪395,000</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="chart">
+      <h3 style="font-size: 16px; margin-bottom: 10px;">התפלגות התקציב לפי שנה</h3>
+      <div class="bar-chart">
+        <div class="bar bar1">
+          <div class="bar-fill">₪143K</div>
+          <div class="bar-label">2026<br>טכנולוגיה</div>
+        </div>
+        <div class="bar bar2">
+          <div class="bar-fill">₪63K</div>
+          <div class="bar-label">2027<br>דחוף</div>
+        </div>
+        <div class="bar bar3">
+          <div class="bar-fill">₪189K</div>
+          <div class="bar-label">2028<br>דור 6</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <h4>💡 נקודות חשובות</h4>
+      <ul>
+        <li><strong>היתרון הגדול:</strong> 92 עמדות ייפתרו ברכישה של 82 מחשבים בלבד — הודות להעברת 10 מחשבי התרומה</li>
+        <li><strong>עלות גבוהה בשלב א':</strong> ₪5,500 למחשב בטכנודע מפני שדורשים מחשבים חזקים לעומסי הוראה כבדים</li>
+        <li><strong>חיסכון בשלבים ב' וג':</strong> ₪4,500 למחשב — עמדות בעומס שימוש נמוך עד בינוני</li>
+        <li><strong>מתחם טכנודע ישן:</strong> 20 מחשבים נשארים מחוץ לתוכנית זו ויגובשו בשלב עתידי</li>
+        <li><strong>אמינות הנתונים:</strong> כל החישובים מבוססים על מיפוי מלא של מלאי המחשבים</li>
+      </ul>
+    </div>
+
+    <div class="cta">
+      <p><strong>📎 פרטים מלאים בקובץ המצורף</strong></p>
+      <p style="font-size: 13px;">
+        <a href="https://docs.google.com/spreadsheets/d/1Dmb_tmNYd80Og7k9kC4h0-dpP7G_wnJfM7UxEkBHUcY/edit?usp=sharing" target="_blank" style="color: #0066cc; text-decoration: none; font-weight: 600; font-size: 16px;">📊 פתח טבלת מיפוי מחשבים - דחיפות החלפה</a>
+      </p>
+      <p style="font-size: 12px; color: #666; margin-top: 10px;">עמודה J מפרטת את ההמלצות לביצוע בכל שלב</p>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    <p>תוכנית עבודה להחלפת מחשבים בטכנודע | תקציב רב-שנתי 2026-2028</p>
+  </div>
+
+</div>
+
+</body>
+</html>
