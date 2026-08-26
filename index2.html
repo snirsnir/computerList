@@ -93,6 +93,9 @@
     background:#42586e; color:#fff; font-size:12px; font-weight:600; padding:8px 9px;
     text-align:right; white-space:nowrap; position:sticky; top:0; z-index:2;
   }
+  table.grid th.sortable{cursor:pointer; user-select:none}
+  table.grid th.sortable:hover{background:#547093}
+  table.grid th.acti{background:#0b5fa5}
   table.grid td{padding:5px 9px; border-bottom:1px solid var(--line); vertical-align:middle}
   table.grid tbody tr{cursor:grab}
   table.grid tbody tr:hover{background:#f4f8fc}
@@ -336,11 +339,12 @@ function urgColor(u){
   if (u.indexOf("נמוך") === 0)    return "#e6f4d9";
   return "#dff0e0";
 }
+/** סוג 3 שמור אך ורק לעמדות של מחשבים 1, מחשבים 2 וטכנולוגיה */
+const TYPE3_LOCS = /^(מחשבים\s*[12]|טכנולוגיה)/;
 function autoType(c){
-  const m = (c.model||"").toLowerCase(), loc = (c.loc||"");
-  const cpu = (c.cpu||"").toLowerCase().replace(/\s/g,"");
+  const m = (c.model||"").toLowerCase(), loc = (c.loc||"").trim();
   if (/thinkpad|latitude|ideapad|idepad|hp250|notebook|laptop|nuc/.test(m) || /נייד/.test(loc)) return 2;
-  if (/i7-|i9-|coreultra|ultra/.test(cpu) || /protower/.test(m)) return 3;
+  if (TYPE3_LOCS.test(loc)) return 3;
   return 1;
 }
 const TYPE_NAMES = {1:"סוג 1 — נייח משרדי", 2:"סוג 2 — נייד משרדי", 3:"סוג 3 — נייח מעבד חזק לחוגים"};
@@ -385,6 +389,51 @@ function sortRows(a,b){
   return bb - aa || b.count - a.count || a.loc.localeCompare(b.loc,"he");
 }
 
+/* ---------- מיון לפי עמודה (בתוך כל מתחם בנפרד) ---------- */
+const URG_ORDER = ["מחשבים מעולים לשנים קדימה","לא נדרשת החלפה בזמן הקרוב","נמוך - החלפה בעוד 4 שנים ומעלה",
+                   "בינוני - החלפה בעוד 3 שנים","גבוה - החלפה בעוד שנתיים","דחוף - החלפה בשנה הבאה","קריטי - החלפה מיידית"];
+function urgRank(u){ const i = URG_ORDER.indexOf(u||""); return i < 0 ? 0 : i + 1; }   // גבוה = דחוף יותר
+function actRank(a){ if (a === "להחליף במיידי") return 2; if (a === "להחליף בשנה הבאה") return 1; return 0; }
+
+const SORTERS = {
+  loc:  {num:false, get:c=>c.loc||""},
+  count:{num:true,  get:c=>c.count},
+  type: {num:true,  get:c=>c.type||0},
+  model:{num:false, get:c=>c.model||""},
+  os:   {num:false, get:c=>c.os||""},
+  cpu:  {num:false, get:c=>c.cpu||""},
+  gen:  {num:true,  get:c=>c.gen==null?-1:c.gen},
+  year: {num:true,  get:c=>c.year==null?-1:c.year},
+  age:  {num:true,  get:c=>{const a=ageOf(c); return a===null?-1:a;}},
+  ram:  {num:true,  get:c=>c.ram==null?-1:c.ram},
+  urg:  {num:true,  get:c=>urgRank(c.urgency)},
+  act:  {num:true,  get:c=>actRank(c.action)},
+  note: {num:false, get:c=>c.note||""}
+};
+
+let sortCol = localStorage.getItem("technoda_sortcol") || "";
+let sortDir = parseInt(localStorage.getItem("technoda_sortdir") || "-1", 10);
+
+function applySort(list){
+  if (!sortCol || !SORTERS[sortCol]) return list.sort(sortRows);
+  const s = SORTERS[sortCol];
+  return list.sort((a,b) => {
+    const va = s.get(a), vb = s.get(b);
+    let d = s.num ? (va - vb) : String(va).localeCompare(String(vb), "he");
+    if (d === 0) d = a.loc.localeCompare(b.loc, "he");
+    return d * sortDir;
+  });
+}
+
+function toggleSort(col){
+  if (!SORTERS[col]) return;
+  if (sortCol === col) sortDir = -sortDir;
+  else { sortCol = col; sortDir = SORTERS[col].num ? -1 : 1; }   // מספרים: לחיצה ראשונה = מהגדול לקטן
+  localStorage.setItem("technoda_sortcol", sortCol);
+  localStorage.setItem("technoda_sortdir", String(sortDir));
+  render();
+}
+
 /* ============================ רינדור ============================ */
 function zoneOptions(sel){
   return `<option value=""${sel?"":" selected"}>— ללא שיוך —</option>` +
@@ -416,8 +465,21 @@ function rowHTML(c){
   </tr>`;
 }
 
-const TH = ["מיקום","כמות","סוג מחשב","דגם","מע׳ הפעלה","מעבד","דור","שנה","גיל","זכרון",
-            "דחיפות החלפה","המלצה לביצוע","בעיות / הערות","העבר למתחם",""];
+const TH = [
+  ["מיקום","loc"], ["כמות","count"], ["סוג מחשב","type"], ["דגם","model"], ["מע׳ הפעלה","os"],
+  ["מעבד","cpu"], ["דור","gen"], ["שנה","year"], ["גיל","age"], ["זכרון","ram"],
+  ["דחיפות החלפה","urg"], ["המלצה לביצוע","act"], ["בעיות / הערות","note"],
+  ["העבר למתחם",null], ["",null]
+];
+
+function headHTML(){
+  return TH.map(([label,key]) => {
+    if (!key) return `<th>${label}</th>`;
+    const on = sortCol === key;
+    const arrow = on ? (sortDir === -1 ? " ▼" : " ▲") : "";
+    return `<th class="sortable${on?" acti":""}" data-sort="${key}" title="מיון לפי ${label}">${label}${arrow}</th>`;
+  }).join("");
+}
 
 function tableSection(title, zoneId, items, allItems, controls){
   const tot = allItems.reduce((s,c)=>s+c.count,0);
@@ -430,7 +492,7 @@ function tableSection(title, zoneId, items, allItems, controls){
     </div>
     <div class="drop" data-zone="${zoneId||""}">
       ${items.length ? `<table class="grid">
-        <thead><tr>${TH.map(h=>`<th>${h}</th>`).join("")}</tr></thead>
+        <thead><tr>${headHTML()}</tr></thead>
         <tbody>${items.map(rowHTML).join("")}</tbody>
       </table>` : `<div class="empty">${allItems.length? "אין שורות שעונות על הסינון" : "גרור לכאן מחשבים, או בחר מתחם זה בעמודה «העבר למתחם»"}</div>`}
     </div>
@@ -440,11 +502,11 @@ function tableSection(title, zoneId, items, allItems, controls){
 function renderTable(){
   const all = comps(), shown = all.filter(passFilter);
   let html = "";
-  const un = shown.filter(c=>!c.zone).sort(sortRows);
+  const un = applySort(shown.filter(c=>!c.zone));
   const unAll = all.filter(c=>!c.zone);
   if (unAll.length) html += tableSection("📋 מחשבים לא משויכים", "", un, unAll, "");
   zoneList().forEach(z => {
-    const items = shown.filter(c=>c.zone===z.id).sort(sortRows);
+    const items = applySort(shown.filter(c=>c.zone===z.id));
     const allZ = all.filter(c=>c.zone===z.id);
     html += tableSection(z.name, z.id, items, allZ,
       `<button class="sm ghost" data-zrename="${z.id}">✏️</button><button class="sm danger" data-zdel="${z.id}">🗑️</button>`);
@@ -556,6 +618,7 @@ function wire(){
   document.querySelectorAll("[data-zrename]").forEach(b=> b.onclick = ()=>renameZone(b.dataset.zrename));
   document.querySelectorAll("[data-zdel]").forEach(b=> b.onclick = ()=>deleteZone(b.dataset.zdel));
   document.querySelectorAll("[data-zn]").forEach(el=> el.ondblclick = ()=>renameZone(el.dataset.zn));
+  document.querySelectorAll("th[data-sort]").forEach(th=> th.onclick = ()=>toggleSort(th.dataset.sort));
 }
 
 function moveTo(id, zoneId){
@@ -659,33 +722,51 @@ async function exportXlsx(){
   const wbk = new ExcelJS.Workbook();
   wbk.creator = "מערכת ניהול מחשבים - טכנודע";
 
-  const ws = wbk.addWorksheet("סטטוס מחשב", {views:[{rightToLeft:true, state:"frozen", ySplit:3}]});
-  const groups=[1,2,3], subs=["כמות מחשבים כללית","דגם","שנת רכישה","כמות","בעיות"];
-  const h2=["מיקום"], h3=[""];
-  groups.forEach(g=>{ h2.push(TYPE_NAMES[g],"","","",""); subs.forEach(s=>h3.push(s)); });
-  ws.addRow(["סטטוס מחשב בטכנודע"]); ws.addRow(h2); ws.addRow(h3);
-  const LAST = 1 + groups.length*subs.length;
-  ws.mergeCells(1,1,1,LAST); ws.mergeCells(2,1,3,1);
-  groups.forEach((g,i)=>{ const s=2+i*subs.length; ws.mergeCells(2,s,2,s+subs.length-1); });
-
   const zs = zoneList();
   const buckets = zs.map(z=>({name:z.name, items:comps().filter(c=>c.zone===z.id)}));
   const un = comps().filter(c=>!c.zone);
   if (un.length) buckets.push({name:"ללא שיוך למתחם", items:un});
 
+  /* ======== גיליון 1: סטטוס מחשב ======== */
+  const ws = wbk.addWorksheet("סטטוס מחשב", {views:[{rightToLeft:true, state:"frozen", ySplit:3}]});
+  const groups=[1,2,3], subs=["כמות מחשבים כללית","דגם","שנת רכישה - כמות","בעיות"];
+  const NS = subs.length;                       // 4 עמודות לכל סוג
+  const LAST = 1 + groups.length*NS;            // 13
+  const EDGES = [1]; groups.forEach((g,i)=>EDGES.push(1+(i+1)*NS));   // 1,5,9,13 — גבולות בין הסוגים
+
+  const h2=["מיקום"], h3=[""];
+  groups.forEach(g=>{ h2.push(TYPE_NAMES[g]); for(let k=1;k<NS;k++) h2.push(""); subs.forEach(s=>h3.push(s)); });
+  ws.addRow(["סטטוס מחשב בטכנודע"]); ws.addRow(h2); ws.addRow(h3);
+  ws.mergeCells(1,1,1,LAST); ws.mergeCells(2,1,3,1);
+  groups.forEach((g,i)=>{ const s=2+i*NS; ws.mergeCells(2,s,2,s+NS-1); });
+
+  /** "2012 - 15" בשורה נפרדת לכל שנה, במקום 1 / 1 / 1 */
+  function yearCounts(items){
+    const m = new Map();
+    items.forEach(c=>{ const y = c.year || "ללא שנה"; m.set(y, (m.get(y)||0) + c.count); });
+    return [...m.entries()]
+      .sort((a,b)=> (a[0]==="ללא שנה"?1:0) - (b[0]==="ללא שנה"?1:0) || a[0]-b[0])
+      .map(([y,n]) => y + " - " + n).join("\n");
+  }
+  function modelCounts(items){
+    const m = new Map();
+    items.forEach(c=>{ const k = c.model || "ללא דגם"; m.set(k, (m.get(k)||0) + c.count); });
+    return [...m.entries()].sort((a,b)=> b[1]-a[1]).map(([k,n]) => k + " (" + n + ")").join("\n");
+  }
+
   const totals={};
   buckets.forEach(b=>{
     const row=[b.name];
     groups.forEach(g=>{
-      const it=b.items.filter(c=>c.type==g);
-      const tot=it.reduce((s,c)=>s+c.count,0);
+      const it = b.items.filter(c=>c.type==g);
+      const tot = it.reduce((s,c)=>s+c.count,0);
       totals[g]=(totals[g]||0)+tot;
-      row.push(tot||"", it.map(c=>c.model||"—").join(" / "), it.map(c=>c.year||"—").join(" / "),
-               it.map(c=>c.count).join(" / "), it.map(c=>c.note).filter(Boolean).join(" · "));
+      row.push(tot||"", it.length?modelCounts(it):"", it.length?yearCounts(it):"",
+               it.map(c=>c.note).filter(Boolean).join(" · "));
     });
     ws.addRow(row);
   });
-  const tr=["סה\"כ"]; groups.forEach(g=>tr.push(totals[g]||0,"","","",""));
+  const tr=["סה\"כ"]; groups.forEach(g=>{ tr.push(totals[g]||0); for(let k=1;k<NS;k++) tr.push(""); });
   ws.addRow(tr);
 
   const lastRow=ws.rowCount, GC=["FF0B5FA5","FF176FBF","FF2E86D6"];
@@ -694,34 +775,57 @@ async function exportXlsx(){
   for(let c=1;c<=LAST;c++){
     if(c===1) styleCell(ws.getCell(2,c), {bold:true,fill:"FF4A5A6A",font:"FFFFFFFF",center:true});
     else{
-      styleCell(ws.getCell(2,c), {bold:true,fill:GC[Math.floor((c-2)/subs.length)],font:"FFFFFFFF",center:true});
+      styleCell(ws.getCell(2,c), {bold:true,fill:GC[Math.floor((c-2)/NS)],font:"FFFFFFFF",center:true});
       styleCell(ws.getCell(3,c), {bold:true,fill:"FFE8EEF5",center:true,size:10});
     }
   }
   for(let r=4;r<=lastRow;r++) for(let c=1;c<=LAST;c++){
-    const cell=ws.getCell(r,c); cell.border=box();
+    const cell=ws.getCell(r,c);
     if(c===1) cell.font={bold:true,name:"Arial",size:11};
     else cell.alignment={horizontal:"center",vertical:"middle",wrapText:true};
     if(r===lastRow) styleCell(cell,{bold:true,fill:"FFD9D9D9"});
   }
+  // קו מודגש בין כל סוג
+  for(let r=1;r<=lastRow;r++) for(let c=1;c<=LAST;c++) ws.getCell(r,c).border = divBorder(c, EDGES);
   ws.getColumn(1).width=30;
-  for(let c=2;c<=LAST;c++) ws.getColumn(c).width=[16,26,14,12,24][(c-2)%subs.length];
+  for(let c=2;c<=LAST;c++) ws.getColumn(c).width=[16,30,18,26][(c-2)%NS];
 
-  const d = wbk.addWorksheet("פירוט מלא", {views:[{rightToLeft:true, state:"frozen", ySplit:1}]});
-  d.addRow(["מתחם","מיקום","סוג מחשב","כמות","דגם","מערכת הפעלה","מעבד","דור","שנת רכישה משוערת","גיל (שנים)","זכרון","דחיפות החלפה","המלצה לביצוע","בעיות / הערות","מתחם מקורי"]);
-  const zn={}; zs.forEach(z=>zn[z.id]=z.name);
-  comps().sort((a,b)=>{
-    const za=a.zone?zn[a.zone]:"￿", zb=b.zone?zn[b.zone]:"￿";
-    return za.localeCompare(zb,"he") || sortRows(a,b);
-  }).forEach(c=>{
-    const a=ageOf(c);
-    d.addRow([c.zone?zn[c.zone]:"ללא שיוך", c.loc, TYPE_SHORT[c.type], c.count, c.model||"", c.os||"",
-              c.cpu||"", c.gen||"", c.year||"", a===null?"":a, c.ram||"", c.urgency||"", c.action||"", c.note||"", c.site||""]);
+  /* ======== גיליון 2: פירוט מלא — לפי מתחמים, כמו בתצוגת הטבלה ======== */
+  const DH = ["מיקום","כמות","סוג מחשב","דגם","מע׳ הפעלה","מעבד","דור","שנה","גיל","זכרון",
+              "דחיפות החלפה","המלצה לביצוע","בעיות / הערות"];
+  const d = wbk.addWorksheet("פירוט מלא", {views:[{rightToLeft:true, state:"frozen", ySplit:2}]});
+  d.addRow(["פירוט מלא לפי מתחמים"]);
+  d.addRow(DH);
+  d.mergeCells(1,1,1,DH.length);
+  styleCell(d.getCell(1,1), {bold:true,size:14,fill:"FF20344A",font:"FFFFFFFF",center:true});
+  d.getRow(1).height=26;
+  d.getRow(2).eachCell(c=>styleCell(c,{bold:true,fill:"FF42586E",font:"FFFFFFFF",center:true,size:11}));
+
+  buckets.forEach(b=>{
+    const items = applySort(b.items.slice());
+    const tot = items.reduce((s,c)=>s+c.count,0);
+    const hr = d.addRow([b.name + "  —  " + items.length + " עמדות · " + tot + " מחשבים"]);
+    d.mergeCells(hr.number,1,hr.number,DH.length);
+    styleCell(d.getCell(hr.number,1), {bold:true,size:12,fill:"FFDCE6F1",center:false});
+    d.getRow(hr.number).height=20;
+    items.forEach(c=>{
+      const a = ageOf(c);
+      const r = d.addRow([c.loc, c.count, TYPE_SHORT[c.type], c.model||"", c.os||"", c.cpu||"",
+                          c.gen||"", c.year||"", a===null?"":a, c.ram||"",
+                          c.urgency||"", c.action||"", c.note||""]);
+      r.eachCell(cell => { cell.border = box(); cell.alignment = {horizontal:"center",vertical:"middle",wrapText:true}; });
+      d.getCell(r.number,1).font = {bold:true,name:"Arial",size:11};
+      d.getCell(r.number,1).alignment = {horizontal:"right",vertical:"middle"};
+      if (a !== null) styleCell(d.getCell(r.number,9), {bold:true, center:true, fill:xlAge(a), font:"FFFFFFFF"});
+      if (c.urgency)  styleCell(d.getCell(r.number,11), {center:true, fill:xlUrg(c.urgency), size:10});
+      if (c.action)   styleCell(d.getCell(r.number,12), {center:true, fill:"FFDFE3FF", size:10});
+      if (c.site === "טכנודע ישן") d.getCell(r.number,1).fill = {type:"pattern",pattern:"solid",fgColor:{argb:"FFFFD24D"}};
+    });
+    const sr = d.addRow(["סה\"כ " + b.name, tot]);
+    for (let c=1;c<=DH.length;c++) styleCell(d.getCell(sr.number,c), {bold:true, fill:"FFEEF2F7", center:c===2});
+    d.addRow([]);
   });
-  d.getRow(1).eachCell(c=>styleCell(c,{bold:true,fill:"FF0B5FA5",font:"FFFFFFFF",center:true}));
-  [22,28,18,8,24,12,14,7,12,10,9,28,20,24,14].forEach((w,i)=>d.getColumn(i+1).width=w);
-  d.eachRow((r,i)=>{ if(i>1) r.eachCell(c=>c.border=box()); });
-  d.autoFilter={from:{row:1,column:1}, to:{row:d.rowCount,column:15}};
+  [26,8,17,26,11,14,7,9,8,9,26,19,24].forEach((w,i)=>d.getColumn(i+1).width=w);
 
   const s = wbk.addWorksheet("סיכום", {views:[{rightToLeft:true}]});
   s.addRow(["טווח גיל","מחשבים","עמדות","אחוז"]);
@@ -754,6 +858,31 @@ function styleCell(cell,o){
   cell.border=box();
 }
 function box(){ const t={style:"thin",color:{argb:"FFB8C2CC"}}; return {top:t,left:t,bottom:t,right:t}; }
+/** גבול רגיל, עם קו עבה בגבולות שבין הסוגים */
+function divBorder(col, edges){
+  const t = {style:"thin",  color:{argb:"FFB8C2CC"}};
+  const k = {style:"medium",color:{argb:"FF20344A"}};
+  return {
+    top:t, bottom:t,
+    right: edges.indexOf(col) >= 0 ? k : t,
+    left:  edges.indexOf(col-1) >= 0 ? k : t
+  };
+}
+function xlAge(a){
+  if (a >= 12) return "FFB00020";
+  if (a >= 9)  return "FFF76707";
+  if (a >= 6)  return "FFC9A800";
+  if (a >= 3)  return "FF8BC34A";
+  return "FF2E7D32";
+}
+function xlUrg(u){
+  if (u.indexOf("קריטי")===0)  return "FFFFD6D6";
+  if (u.indexOf("דחוף")===0)   return "FFFFE0CC";
+  if (u.indexOf("גבוה")===0)   return "FFFFEECC";
+  if (u.indexOf("בינוני")===0) return "FFFFF8CC";
+  if (u.indexOf("נמוך")===0)   return "FFE6F4D9";
+  return "FFDFF0E0";
+}
 
 /* ============================ אתחול ============================ */
 document.getElementById("vTable").onclick = ()=>{ viewMode="table"; localStorage.setItem("technoda_view","table"); render(); };
